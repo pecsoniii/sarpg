@@ -2,7 +2,7 @@ import pygame
 from src.settings import *
 
 class Projectile(pygame.sprite.Sprite):
-    def __init__(self, pos, direction, groups, obstacle_sprites):
+    def __init__(self, pos, direction, groups, obstacle_sprites, damage=10):
         super().__init__(groups)
         self.image = pygame.Surface((16, 16), pygame.SRCALPHA)
         self.draw_projectile()
@@ -10,14 +10,15 @@ class Projectile(pygame.sprite.Sprite):
         self.direction = direction.normalize()
         self.speed = 12
         self.obstacle_sprites = obstacle_sprites
-        self.damage = 10
+        self.damage = damage
         self.spawn_time = pygame.time.get_ticks()
         self.lifetime = 1000 
+        self.glow_color = NEON_YELLOW
 
     def draw_projectile(self):
         # Glowing orb
-        pygame.draw.circle(self.image, (0, 255, 255), (8, 8), 6)
-        pygame.draw.circle(self.image, WHITE, (8, 8), 3)
+        pygame.draw.circle(self.image, NEON_YELLOW, (8, 8), 4)
+        pygame.draw.circle(self.image, WHITE, (8, 8), 2)
 
     def update(self):
         self.rect.x += self.direction.x * self.speed
