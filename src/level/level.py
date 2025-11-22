@@ -128,7 +128,7 @@ class Level:
             for enemy, projectiles in hits.items():
                 for projectile in projectiles:
                     enemy.take_damage(projectile.damage)
-                    self.create_particles(enemy.rect.center, RED)
+                    self.create_particles(enemy.rect.center, NEON_RED)
                     self.visible_sprites.add_shake(5) 
                     FloatingText(enemy.rect.center, str(projectile.damage), [self.visible_sprites])
 

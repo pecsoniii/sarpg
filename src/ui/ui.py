@@ -19,7 +19,7 @@ class UI:
         current_rect.width = current_width
         
         # Bar
-        color = GREEN if current > 30 else RED
+        color = NEON_LIME if current > 30 else NEON_RED
         pygame.draw.rect(self.display_surface, color, current_rect)
         pygame.draw.rect(self.display_surface, WHITE, self.health_bar_rect, 2) # Border
 
