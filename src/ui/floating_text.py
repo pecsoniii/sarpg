@@ -13,8 +13,9 @@ class FloatingText(pygame.sprite.Sprite):
         self.spawn_time = pygame.time.get_ticks()
         self.lifetime = 1000
 
-    def update(self):
-        self.pos += self.velocity
+    def update(self, dt):
+        # Velocity -1 per frame -> -60 per sec
+        self.pos.y += -60 * dt
         self.rect.center = self.pos
 
         # Fade out

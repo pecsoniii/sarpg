@@ -15,14 +15,20 @@ class Projectile(pygame.sprite.Sprite):
         self.lifetime = 1000 
         self.glow_color = NEON_YELLOW
 
+        # Pre-render glow (Projectile is smaller)
+        self.glow_surf = pygame.Surface((32, 32), pygame.SRCALPHA)
+        pygame.draw.circle(self.glow_surf, (*self.glow_color, 50), (16, 16), 16)
+
     def draw_projectile(self):
         # Glowing orb
         pygame.draw.circle(self.image, NEON_YELLOW, (8, 8), 4)
         pygame.draw.circle(self.image, WHITE, (8, 8), 2)
 
-    def update(self):
-        self.rect.x += self.direction.x * self.speed
-        self.rect.y += self.direction.y * self.speed
+    def update(self, dt):
+        # Speed needs to be adapted for DT. Originally 12 per frame (60fps) = 720 per sec
+        speed_per_sec = 720
+        self.rect.x += self.direction.x * speed_per_sec * dt
+        self.rect.y += self.direction.y * speed_per_sec * dt
         
         if pygame.time.get_ticks() - self.spawn_time > self.lifetime:
              self.kill()
