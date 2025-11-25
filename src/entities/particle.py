@@ -18,11 +18,15 @@ class Particle(pygame.sprite.Sprite):
         self.alpha = 255
         self.decay_rate = random.randint(10, 20)
         
-    def update(self):
-        self.rect.x += self.direction.x * self.speed
-        self.rect.y += self.direction.y * self.speed
+    def update(self, dt):
+        # Speed originally 2-5 pixels/frame. 60fps -> 120-300 pixels/sec
+        speed_per_sec = self.speed * 60
+        self.rect.x += self.direction.x * speed_per_sec * dt
+        self.rect.y += self.direction.y * speed_per_sec * dt
         
-        self.alpha -= self.decay_rate
+        # Alpha decay 10-20 per frame. 60fps -> 600-1200 per sec
+        decay_per_sec = self.decay_rate * 60
+        self.alpha -= decay_per_sec * dt
         if self.alpha <= 0:
             self.kill()
         else:

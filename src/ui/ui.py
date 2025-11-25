@@ -32,10 +32,21 @@ class UI:
         pygame.draw.rect(self.display_surface, (20, 20, 20), bg_rect)
         pygame.draw.rect(self.display_surface, (255, 215, 0), bg_rect, 2)
         
-        self.display_surface.blit(text_surf, rect)
+    def show_xp(self, level, xp, needed):
+        # Level Text
+        lvl_surf = self.font.render(f"Lvl {level}", True, WHITE)
+        self.display_surface.blit(lvl_surf, (10, 40))
+
+        # Bar
+        bar_rect = pygame.Rect(60, 45, 150, 10)
+        pygame.draw.rect(self.display_surface, (60, 60, 60), bar_rect)
+
+        ratio = xp / max(1, needed)
+        curr_rect = bar_rect.copy()
+        curr_rect.width = bar_rect.width * ratio
+        pygame.draw.rect(self.display_surface, (0, 255, 255), curr_rect)
+        pygame.draw.rect(self.display_surface, WHITE, bar_rect, 1)
 
     def display(self, player):
         self.show_health(player.health, player.max_health)
-        # We need access to inventory for credits. 
-        # We can pass it in or store ref. 
-        pass # Handled in Level for now via direct call
+        pass

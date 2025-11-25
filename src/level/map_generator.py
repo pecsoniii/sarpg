@@ -8,7 +8,10 @@ class MapGenerator:
         self.grid = [['x' for _ in range(width)] for _ in range(height)]
         self.rooms = []
 
-    def generate(self):
+    def generate(self, is_boss=False):
+        if is_boss:
+            return self.generate_arena()
+
         # 1. Create Rooms
         attempts = 0
         while len(self.rooms) < 8 and attempts < 100:
@@ -69,6 +72,21 @@ class MapGenerator:
             self.grid[y][x] = ' '
             self.grid[y][x+1] = ' '
 
+    def generate_arena(self):
+        # Create one giant room
+        margin = 5
+        room = Rect(margin, margin, self.width - margin*2, self.height - margin*2)
+        self.create_room(room)
+        self.rooms.append(room)
+
+        # Place Player (Bottom Center)
+        self.grid[self.height - margin - 2][self.width // 2] = 'p'
+
+        # Place Boss (Top Center)
+        self.grid[margin + 2][self.width // 2] = 'B'
+
+        return ["".join(row) for row in self.grid]
+
     def place_entities(self):
         # Convert grid to list of strings for compatibility
         # But first, place special tiles
@@ -77,12 +95,12 @@ class MapGenerator:
         start_room = self.rooms[0]
         self.grid[start_room.y + start_room.h // 2][start_room.x + start_room.w // 2] = 'p'
 
-        # Shop in last room (or random)
-        shop_room = self.rooms[-1]
-        self.grid[shop_room.y + shop_room.h // 2][shop_room.x + shop_room.w // 2] = 'S'
+        # Shop in last room (or random) - NO SHOP IN STAGES, only Hub
+        # shop_room = self.rooms[-1]
+        # self.grid[shop_room.y + shop_room.h // 2][shop_room.x + shop_room.w // 2] = 'S'
 
         # Enemies in other rooms
-        for room in self.rooms[1:-1]:
+        for room in self.rooms[1:]: # Start from room 1 (skip player room)
             num_enemies = random.randint(1, 3)
             for _ in range(num_enemies):
                 ex = random.randint(room.x + 1, room.x + room.w - 2)

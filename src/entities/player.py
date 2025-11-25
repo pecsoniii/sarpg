@@ -1,4 +1,5 @@
 import pygame
+import math
 from src.settings import *
 from src.entities.entity import Entity
 from src.entities.projectile import Projectile
@@ -9,6 +10,7 @@ class Player(Entity):
         # Create a transparent surface for the spaceship
         self.image = pygame.Surface((TILESIZE, TILESIZE), pygame.SRCALPHA)
         self.rect = self.image.get_rect(topleft = pos)
+        self.hitbox = self.rect.inflate(-10, -10) # Smaller collider
         self.obstacle_sprites = obstacle_sprites
         self.joysticks = joysticks
         
@@ -35,18 +37,23 @@ class Player(Entity):
         self.angle = 0
         self.glow_color = NEON_CYAN
 
+        # Pre-render glow
+        self.glow_surf = pygame.Surface((TILESIZE*2, TILESIZE*2), pygame.SRCALPHA)
+        pygame.draw.circle(self.glow_surf, (*self.glow_color, 50), (TILESIZE, TILESIZE), TILESIZE)
+
         # Physics
         self.pos = pygame.math.Vector2(self.rect.topleft)
         self.velocity = pygame.math.Vector2(0, 0)
-        self.acceleration = 0.5
-        self.friction = 0.1
-        self.max_speed = 7
+        # Tuning for Pixels/Second (assuming 60fps originally: 0.5 * 60 = 30, etc)
+        self.acceleration = 600
+        self.friction = 500
+        self.max_speed = 400
 
         # Dash
         self.can_dash = True
         self.dash_time = 0
         self.dash_cooldown = 1000
-        self.dash_speed = 20
+        self.dash_speed = 1200
 
     def draw_ship(self):
         # Draw a Neon Fighter
@@ -97,8 +104,10 @@ class Player(Entity):
 
         # Update Rotation
         if aim_direction.magnitude() > 0:
-             self.angle = (180 / 3.14159) * -pygame.math.atan2(aim_direction.y, aim_direction.x) - 90
+             self.angle = math.degrees(-math.atan2(aim_direction.y, aim_direction.x)) - 90
              self.image = pygame.transform.rotate(self.base_image, int(self.angle))
+             # Note: We update rect.center later to match physics pos/hitbox,
+             # but for now we keep it centered to avoid jitter before physics update.
              self.rect = self.image.get_rect(center=self.rect.center)
 
         # 2. Movement Input
@@ -177,8 +186,23 @@ class Player(Entity):
         self.can_shoot = False
         self.shoot_time = pygame.time.get_ticks()
         
+        # Check Weapon Mod
+        # Note: Player needs access to equipped_mods.
+        # For now, let's assume Level passes it or sets a flag.
+        # Actually, better to have 'shoot_pattern' strategy.
+
         if direction.magnitude() > 0:
+            # Basic
             self.create_projectile(self.rect.center, direction)
+
+            # Example Mod Logic (Hardcoded for now, ideally modular)
+            if hasattr(self, 'weapon_mod') and self.weapon_mod == 'spread_shot':
+                # Left/Right angles
+                angle = math.degrees(math.atan2(direction.y, direction.x))
+                for offset in [-15, 15]:
+                    rad = math.radians(angle + offset)
+                    new_dir = pygame.math.Vector2(math.cos(rad), math.sin(rad))
+                    self.create_projectile(self.rect.center, new_dir)
 
     def take_damage(self, amount):
         if not self.invulnerable:
@@ -213,22 +237,116 @@ class Player(Entity):
         if int(value / 20) % 2 == 0: return 255
         else: return 0
 
-    def update(self):
-        self.input()
+    def update(self, dt):
+        # 1. Handle Input (updates velocity target, triggers actions)
+        self.input(dt)
+
+        # 2. Physics Update (Movement, Collision)
+        self.physics_update(dt)
+
+        # 3. Status/Cooldowns
         self.cooldowns()
+
+    def input(self, dt):
+        # ... (Existing Input Logic needs to be wrapped or passed dt if needed,
+        #      but most input sets flags. Acceleration needs dt)
+        keys = pygame.key.get_pressed()
+
+        # Aim Input ... (No dt needed for immediate aim)
+        aim_direction = pygame.math.Vector2(0, 0)
+        using_mouse = True
+        if len(self.joysticks) > 0:
+            joystick = self.joysticks[0]
+            if joystick.get_numaxes() >= 4:
+                axis_x = joystick.get_axis(2)
+                axis_y = joystick.get_axis(3)
+                if abs(axis_x) > 0.1 or abs(axis_y) > 0.1:
+                    aim_direction = pygame.math.Vector2(axis_x, axis_y)
+                    using_mouse = False
+        if using_mouse:
+             mouse_pos = pygame.mouse.get_pos()
+             player_screen_pos = pygame.math.Vector2(WIDTH // 2, HEIGHT // 2)
+             mouse_vec = pygame.math.Vector2(mouse_pos)
+             aim_direction = mouse_vec - player_screen_pos
+        if aim_direction.magnitude() > 0:
+             self.angle = math.degrees(-math.atan2(aim_direction.y, aim_direction.x)) - 90
+             self.image = pygame.transform.rotate(self.base_image, int(self.angle))
+             self.rect = self.image.get_rect(center=self.rect.center)
+
+        # Movement Input
+        move_vector = pygame.math.Vector2(0, 0)
+        if keys[pygame.K_w]: move_vector.y = -1
+        elif keys[pygame.K_s]: move_vector.y = 1
+        if keys[pygame.K_d]: move_vector.x = 1
+        elif keys[pygame.K_a]: move_vector.x = -1
         
-        # Custom Move with Velocity
+        if len(self.joysticks) > 0:
+             joystick = self.joysticks[0]
+             if joystick.get_numaxes() >= 2:
+                axis_x = joystick.get_axis(0)
+                axis_y = joystick.get_axis(1)
+                if abs(axis_x) > 0.1: move_vector.x = axis_x
+                if abs(axis_y) > 0.1: move_vector.y = axis_y
+
+        # Apply Acceleration with DT
+        if move_vector.magnitude() > 0:
+            move_vector = move_vector.normalize()
+            self.velocity += move_vector * self.acceleration * dt
+        else:
+            # Friction with DT
+            if self.velocity.magnitude() > 0:
+                friction_amount = self.friction * dt
+                if self.velocity.magnitude() < friction_amount:
+                     self.velocity = pygame.math.Vector2(0,0)
+                else:
+                     self.velocity -= self.velocity.normalize() * friction_amount
+
+        # Cap Speed
+        if self.velocity.magnitude() > self.max_speed:
+            self.velocity = self.velocity.normalize() * self.max_speed
+
+        self.direction = self.velocity
+
+        # Dash
+        should_dash = False
+        if keys[pygame.K_SPACE]: should_dash = True
+        if len(self.joysticks) > 0:
+            joystick = self.joysticks[0]
+            if joystick.get_button(4): should_dash = True
+            if joystick.get_numaxes() > 4:
+                if joystick.get_axis(4) > 0: should_dash = True
+
+        if should_dash and self.can_dash and self.velocity.magnitude() > 0:
+            self.dash()
+
+        # Shooting
+        mouse_buttons = pygame.mouse.get_pressed()
+        should_shoot = mouse_buttons[0]
+
+        if len(self.joysticks) > 0:
+             joystick = self.joysticks[0]
+             if joystick.get_numaxes() > 5:
+                 if joystick.get_axis(5) > 0: should_shoot = True
+             if joystick.get_numbuttons() > 5:
+                 if joystick.get_button(5): should_shoot = True
+
+        if should_shoot and self.can_shoot:
+            self.shoot(aim_direction)
+
+    def physics_update(self, dt):
+        # Apply velocity to position using DT
         if self.velocity.magnitude() != 0:
             # Move X
-            self.pos.x += self.velocity.x
-            self.rect.x = round(self.pos.x)
+            self.pos.x += self.velocity.x * dt
+            self.hitbox.x = round(self.pos.x)
             self.collision('horizontal')
-            self.pos.x = self.rect.x # Sync back if collision happened
+            self.pos.x = self.hitbox.x
 
             # Move Y
-            self.pos.y += self.velocity.y
-            self.rect.y = round(self.pos.y)
+            self.pos.y += self.velocity.y * dt
+            self.hitbox.y = round(self.pos.y)
             self.collision('vertical')
-            self.pos.y = self.rect.y # Sync back if collision happened
+            self.pos.y = self.hitbox.y
 
-        # Rotation is handled in input() now
+            # Sync Visual Rect
+            self.rect.center = self.hitbox.center

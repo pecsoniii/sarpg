@@ -1,30 +1,51 @@
 import pygame
 from src.settings import *
+from src.data.mods import MODS
+import random
 
 class ShopMenu:
-    def __init__(self, inventory, player, joysticks):
+    def __init__(self, inventory, player, joysticks, game_data):
         self.inventory = inventory
         self.player = player
         self.joysticks = joysticks
+        self.game_data = game_data
         self.display_surface = pygame.display.get_surface()
         self.font = pygame.font.Font(None, 36)
 
-        # Options
-        self.options = [
-            {'name': 'Speed Upgrade', 'cost': 100, 'stat': 'speed', 'increase': 1, 'max': 12},
-            {'name': 'Damage Upgrade', 'cost': 200, 'stat': 'damage', 'increase': 5, 'max': 50},
-            {'name': 'Health Upgrade', 'cost': 150, 'stat': 'max_health', 'increase': 20, 'max': 300},
-            {'name': 'Exit', 'cost': 0}
-        ]
-        self.selection_index = 0
         self.visible = False
-
-        # Cooldown for input to prevent scrolling too fast
+        self.selection_index = 0
         self.input_cooldown = 0
+
+        self.generated_items = []
+        self.generate_shop_items()
+
+    def generate_shop_items(self):
+        self.generated_items = []
+
+        # 1. Consumables
+        self.generated_items.append({'type': 'consumable', 'id': 'repair_kit', 'name': 'Repair Kit', 'cost': 50, 'desc': 'Heals 50 HP'})
+
+        # 2. Random Mods (2 slots)
+        all_mods = list(MODS.keys())
+        for _ in range(2):
+            mod_id = random.choice(all_mods)
+            mod = MODS[mod_id]
+            self.generated_items.append({
+                'type': 'mod',
+                'id': mod_id,
+                'name': mod['name'],
+                'cost': mod['cost'],
+                'desc': mod['desc']
+            })
+
+        self.generated_items.append({'type': 'exit', 'name': 'Exit', 'cost': 0, 'desc': ''})
 
     def toggle(self):
         self.visible = not self.visible
-        self.selection_index = 0
+        if self.visible:
+            self.generate_shop_items() # Refresh stock? Or keep persistent per visit?
+            # Usually per run or per visit. Let's refresh for now.
+            self.selection_index = 0
 
     def input(self):
         # Only allow input every 200ms
@@ -64,8 +85,8 @@ class ShopMenu:
                     moved = True
 
         if moved:
-            if self.selection_index < 0: self.selection_index = len(self.options) - 1
-            if self.selection_index >= len(self.options): self.selection_index = 0
+            if self.selection_index < 0: self.selection_index = len(self.generated_items) - 1
+            if self.selection_index >= len(self.generated_items): self.selection_index = 0
             self.input_cooldown = pygame.time.get_ticks()
 
         # Selection (Space / Enter / A Button)
@@ -83,40 +104,31 @@ class ShopMenu:
             self.select_option()
 
     def select_option(self):
-        option = self.options[self.selection_index]
+        item = self.generated_items[self.selection_index]
 
-        if option['name'] == 'Exit':
+        if item['type'] == 'exit':
             self.toggle()
             return
 
-        if self.inventory.credits >= option['cost']:
-            # Apply Upgrade
-            success = False
+        if self.inventory.credits >= item['cost']:
+            if item['type'] == 'consumable':
+                # Add to consumables
+                self.game_data['consumables'][item['id']] += 1
+                self.inventory.credits -= item['cost']
 
-            if option['stat'] == 'speed':
-                if self.player.max_speed < option['max']:
-                    self.player.max_speed += option['increase']
-                    success = True
-            elif option['stat'] == 'damage':
-                # Damage is stored on projectile, but usually player determines it
-                # We need to add a damage stat to player to pass to projectile
-                # For now let's hack it or add it to player
-                if not hasattr(self.player, 'projectile_damage'):
-                    self.player.projectile_damage = 10 # Base
+            elif item['type'] == 'mod':
+                # Add to mod inventory if not owned? Or duplicate ok?
+                # Let's allow duplicates for selling later maybe?
+                self.game_data['mods_inventory'].append(item['id'])
+                self.inventory.credits -= item['cost']
 
-                if self.player.projectile_damage < option['max']:
-                    self.player.projectile_damage += option['increase']
-                    success = True
-            elif option['stat'] == 'max_health':
-                if self.player.max_health < option['max']:
-                    self.player.max_health += option['increase']
-                    self.player.health += option['increase'] # Heal the difference
-                    success = True
-
-            if success:
-                self.inventory.credits -= option['cost']
-                # Increase cost for next time?
-                option['cost'] = int(option['cost'] * 1.5)
+                # Auto-equip if slot empty?
+                mod_type = MODS[item['id']]['type']
+                if self.game_data['equipped_mods'][mod_type] is None:
+                    self.game_data['equipped_mods'][mod_type] = item['id']
+                    # Apply immediately if player present
+                    # (Requires calling apply_player_stats on level again? Or assume next run)
+                    # Let's not complicate. Next run/re-enter applies it.
 
     def display(self):
         if not self.visible: return
@@ -128,24 +140,30 @@ class ShopMenu:
         self.display_surface.blit(overlay, (0,0))
 
         # Title
-        title = self.font.render("UPGRADE STATION", True, (255, 215, 0))
+        title = self.font.render("BLACK MARKET", True, (255, 0, 255))
         self.display_surface.blit(title, (WIDTH // 2 - title.get_width() // 2, 50))
 
         # Credits
         credits_text = self.font.render(f"Credits: {self.inventory.credits}", True, WHITE)
         self.display_surface.blit(credits_text, (WIDTH // 2 - credits_text.get_width() // 2, 100))
 
-        # Options
+        # Items
         y = 150
-        for index, option in enumerate(self.options):
+        for index, item in enumerate(self.generated_items):
             color = WHITE
             if index == self.selection_index:
                 color = (255, 215, 0) # Gold selection
 
-            text_str = option['name']
-            if option['cost'] > 0:
-                 text_str += f" - {option['cost']} Cr"
+            text_str = item['name']
+            if item['cost'] > 0:
+                 text_str += f" - {item['cost']} Cr"
 
             text = self.font.render(text_str, True, color)
             self.display_surface.blit(text, (WIDTH // 2 - text.get_width() // 2, y))
+
+            # Description if selected
+            if index == self.selection_index and item['desc']:
+                desc_text = self.font.render(item['desc'], True, (100, 255, 255))
+                self.display_surface.blit(desc_text, (WIDTH // 2 - desc_text.get_width() // 2, HEIGHT - 100))
+
             y += 50

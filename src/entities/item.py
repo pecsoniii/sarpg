@@ -11,5 +11,11 @@ class Item(pygame.sprite.Sprite):
             self.image.fill((200, 200, 200)) # Silver
         elif item_type == 'fuel':
             self.image.fill((255, 165, 0)) # Orange
+        elif item_type == 'xp':
+            self.image.fill((0, 255, 255)) # Cyan
             
         self.rect = self.image.get_rect(center=pos)
+
+    def update(self, dt):
+        # Items are static for now, but need signature to match group update
+        pass
